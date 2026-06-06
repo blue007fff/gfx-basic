@@ -67,3 +67,19 @@ vcpkg_installed/
 # test output & cache
 Testing/
 .cache/
+
+# Visual Studio
+.vs/
+*.user
+*.suo
+*.sdf
+*.opensdf
+*.VC.db
+*.VC.opendb
+*.exp
+
+# ImGui layout file (saved next to exe in build/)
+imgui.ini
+
+# Log / stderr capture
+*_stderr.txt

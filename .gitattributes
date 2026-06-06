@@ -1,0 +1,38 @@
+# 기본: 텍스트 파일 자동 판별, 저장소에는 항상 LF로 통일
+* text=auto eol=lf
+
+# 소스/빌드/문서 — 명시적으로 LF
+*.cpp   text eol=lf
+*.h     text eol=lf
+*.hpp   text eol=lf
+*.c     text eol=lf
+*.cc    text eol=lf
+*.glsl  text eol=lf
+*.vert  text eol=lf
+*.frag  text eol=lf
+*.comp  text eol=lf
+*.geom  text eol=lf
+*.cmake text eol=lf
+*.txt   text eol=lf
+*.json  text eol=lf
+*.md    text eol=lf
+
+# Windows 전용 스크립트는 CRLF 유지
+*.bat   text eol=crlf
+*.cmd   text eol=crlf
+
+# 바이너리 — 변환 금지 (변환 시 손상됨)
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.tga   binary
+*.dds   binary
+*.hdr   binary
+*.ktx   binary
+*.spv   binary
+*.fbx   binary
+*.gltf  binary
+*.glb   binary
+
+# GitHub 언어 통계에서 번들된 외부 코드 제외
+extern/** linguist-vendored

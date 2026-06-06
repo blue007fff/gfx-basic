@@ -1,0 +1,11 @@
+{
+  "name": "gfx-basic",
+  "version": "0.1.0",
+  "dependencies": [
+    "glfw3",
+    "glm",
+    "stb",
+    "spdlog",
+    "volk"
+  ]
+}

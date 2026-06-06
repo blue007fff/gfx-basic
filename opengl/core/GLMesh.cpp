@@ -1,5 +1,7 @@
 #include "core/GLMesh.h"
 
+#include <spdlog/spdlog.h>
+
 #pragma warning(push)
 #pragma warning(disable : 4996 4305 4244)
 #define PAR_SHAPES_IMPLEMENTATION
@@ -40,6 +42,8 @@ GLMesh GLMesh::from(const Mesh& d) {
     GLMesh m;
     m.count = static_cast<uint32_t>(d.indices.size());
 
+    // VAO는 "정점 버퍼 자체"가 아니라 attribute binding 상태를 기억한다.
+    // VBO/EBO를 바인딩한 뒤 attribute pointer를 지정하면 그 연결이 VAO에 저장된다.
     glGenVertexArrays(1, &m.vao);
     glGenBuffers(1, &m.vbo);
     glGenBuffers(1, &m.ebo);
@@ -56,6 +60,8 @@ GLMesh GLMesh::from(const Mesh& d) {
         d.indices.data(), GL_STATIC_DRAW);
 
     constexpr GLsizei stride = sizeof(Vertex);
+    // Shader location과 C++ Vertex 구조체 layout을 맞춘다.
+    // location 0 = position(float3), 1 = normal(float3), 2 = uv(float2).
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, stride, (void*)0);
     glEnableVertexAttribArray(0);
     glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, stride, (void*)(3 * sizeof(float)));
@@ -64,6 +70,7 @@ GLMesh GLMesh::from(const Mesh& d) {
     glEnableVertexAttribArray(2);
 
     glBindVertexArray(0);
+    spdlog::info("GL mesh uploaded: vertices={}, indices={}", d.verts.size(), d.indices.size());
     return m;
 }
 
@@ -82,6 +89,8 @@ Mesh quad(float size) {
 }
 
 Mesh cube() {
+    // par_shapes에는 box primitive가 없어서 plane 6개를 회전/병합해 cube를 만든다.
+    // 각 면이 독립 정점을 가지므로 normal/uv가 면 단위로 깨끗하게 유지된다.
     float y[]{0,1,0}, xa[]{1,0,0}, za[]{0,0,1};
     par_shapes_mesh* pz = par_shapes_create_plane(4, 4);
     par_shapes_translate(pz, -0.5f, -0.5f, 0.5f);
@@ -101,6 +110,7 @@ Mesh cube() {
 }
 
 Mesh sphere(float radius) {
+    // Parametric sphere는 세그먼트가 많을수록 매끄럽지만 vertex/index 수도 증가한다.
     par_shapes_mesh* shape = par_shapes_create_parametric_sphere(36, 18);
     par_shapes_scale(shape, radius, radius, radius);
     auto d = fromParShape(shape);
@@ -110,6 +120,7 @@ Mesh sphere(float radius) {
 }
 
 Mesh cylinder(float radius, float height) {
+    // par_shapes cylinder는 옆면만 만들기 때문에 얇게 눌린 hemisphere를 cap으로 붙인다.
     float xa[]{1,0,0}, ya[]{0,1,0}, za[]{0,0,1};
     par_shapes_mesh* shape = par_shapes_create_cylinder(36, 4);
     for (int i = 0; i < shape->npoints; ++i) {

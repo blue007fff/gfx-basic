@@ -24,6 +24,7 @@ std::string GLBaseApp::assetPath(const char* rel) {
 }
 
 void GLBaseApp::Run() {
+    spdlog::info("Starting OpenGL example: {} ({}x{})", m_title, m_width, m_height);
     InitGLFW();
     InitGlad();
     m_prevTime = glfwGetTime();
@@ -57,6 +58,7 @@ void GLBaseApp::InitGLFW() {
     glfwSetCursorPosCallback(m_window, OnCursorPosEvent);
     glfwSetScrollCallback(m_window, OnScrollEvent);
     glfwSwapInterval(1);
+    spdlog::info("GLFW window created for OpenGL: {} (vsync on)", m_title);
 }
 
 void GLBaseApp::InitGlad() {
@@ -64,9 +66,11 @@ void GLBaseApp::InitGlad() {
         spdlog::error("gladLoadGL failed");
         throw std::runtime_error("gladLoadGL failed");
     }
+    spdlog::info("OpenGL context ready: {}", reinterpret_cast<const char*>(glGetString(GL_VERSION)));
 }
 
 void GLBaseApp::MainLoop() {
+    spdlog::info("Entering render loop: {}", m_title);
     while (!glfwWindowShouldClose(m_window) && m_running) {
         glfwPollEvents();
 
@@ -80,6 +84,7 @@ void GLBaseApp::MainLoop() {
 }
 
 void GLBaseApp::Shutdown() {
+    spdlog::info("Shutting down OpenGL example: {}", m_title);
     glfwDestroyWindow(m_window);
     glfwTerminate();
 }
@@ -87,6 +92,9 @@ void GLBaseApp::Shutdown() {
 void GLBaseApp::OnFramebufferResize(GLFWwindow* w, int width, int height) {
     glViewport(0, 0, width, height);
     auto* app = static_cast<GLBaseApp*>(glfwGetWindowUserPointer(w));
+    app->m_width = width;
+    app->m_height = height;
+    spdlog::info("OpenGL framebuffer resized: {}x{}", width, height);
     app->OnResize(width, height);
 }
 

@@ -12,6 +12,8 @@ layout(location = 0) in vec3 aPos;
 layout(location = 2) in vec2 aUV;
 out vec2 vUV;
 void main() {
+    // Texture 예제는 변환 없이 clip-space 좌표를 그대로 사용한다.
+    // aUV는 fragment shader로 보간되어 각 픽셀의 texture lookup 좌표가 된다.
     gl_Position = vec4(aPos, 1.0);
     vUV = aUV;
 }
@@ -25,6 +27,8 @@ uniform sampler2D uTex0;
 uniform sampler2D uTex1;
 uniform float     uMix;
 void main() {
+    // sampler2D uniform은 texture object가 아니라 texture unit 번호를 가리킨다.
+    // CPU 쪽에서 uTex0=0, uTex1=1로 세팅하고 GL_TEXTURE0/1에 실제 texture를 bind한다.
     vec4 c0 = texture(uTex0, vUV);
     vec4 c1 = texture(uTex1, vUV);
     fragColor = mix(c0, c1, uMix);
@@ -41,6 +45,7 @@ static GLuint compileShader(GLenum type, const char* src) {
         spdlog::error("OpenGL shader compile failed: {}", log);
         throw std::runtime_error(std::string("shader: ") + log);
     }
+    spdlog::info("OpenGL shader compiled: type=0x{:x}", static_cast<unsigned>(type));
     return s;
 }
 
@@ -61,6 +66,7 @@ static GLuint loadTexture(const char* path) {
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     stbi_image_free(data);
+    spdlog::info("Texture loaded: {} ({}x{}, channels forced to RGBA)", path, w, h);
     return tex;
 }
 
@@ -80,11 +86,15 @@ private:
         if (key == GLFW_KEY_1) m_mix = 0.0f;
         if (key == GLFW_KEY_2) m_mix = 0.5f;
         if (key == GLFW_KEY_3) m_mix = 1.0f;
+        if (key == GLFW_KEY_1 || key == GLFW_KEY_2 || key == GLFW_KEY_3)
+            spdlog::info("Texture mix changed: {}", m_mix);
     }
 
     void OnInit() override {
+        // GLMesh::from uploads the CPU-side quad vertices/indices to VBO/EBO.
         m_quad = GLMesh::from(quad());
 
+        // A program is created by linking independently compiled shader stages.
         GLuint vs = compileShader(GL_VERTEX_SHADER,   vsSource);
         GLuint fs = compileShader(GL_FRAGMENT_SHADER, fsSource);
         m_program = glCreateProgram();
@@ -102,10 +112,14 @@ private:
         m_tex0 = loadTexture(assetPath("textures/container.jpg").c_str());
         m_tex1 = loadTexture(assetPath("textures/awesomeface.png").c_str());
 
+        // Bind texture unit indices once. The per-frame work is only binding texture objects
+        // to GL_TEXTURE0/1 and updating uMix.
         glUseProgram(m_program);
         glUniform1i(glGetUniformLocation(m_program, "uTex0"), 0);
         glUniform1i(glGetUniformLocation(m_program, "uTex1"), 1);
         m_locMix = glGetUniformLocation(m_program, "uMix");
+        spdlog::info("OpenGL texture example initialized: program={}, tex0={}, tex1={}",
+                     m_program, m_tex0, m_tex1);
     }
 
     void OnRender() override {

@@ -27,6 +27,8 @@ void main() {
 )";
 
 static GLuint compileShader(GLenum type, const char* src) {
+    // Shader object는 "소스 코드 -> 컴파일된 stage" 한 개를 의미한다.
+    // type이 GL_VERTEX_SHADER면 vertex stage, GL_FRAGMENT_SHADER면 fragment stage.
     GLuint shader = glCreateShader(type);
     glShaderSource(shader, 1, &src, nullptr);
     glCompileShader(shader);
@@ -38,6 +40,7 @@ static GLuint compileShader(GLenum type, const char* src) {
         spdlog::error("OpenGL shader compile failed: {}", log);
         throw std::runtime_error(std::string("shader compile: ") + log);
     }
+    spdlog::info("OpenGL shader compiled: type=0x{:x}", static_cast<unsigned>(type));
     return shader;
 }
 
@@ -96,6 +99,8 @@ private:
         checkProgramLink(m_program);
         glDeleteShader(vs);
         glDeleteShader(fs);
+        spdlog::info("OpenGL triangle initialized: VAO={}, VBO={}, program={}",
+                     m_vao, m_vbo, m_program);
     }
 
     void OnRender() override {

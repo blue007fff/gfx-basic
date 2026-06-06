@@ -26,6 +26,8 @@ out vec3 vNormal;
 void main() {
     vec4 worldPos = uModel * vec4(aPos, 1.0);
     vFragPos    = worldPos.xyz;
+    // Normal은 위치처럼 translation을 받으면 안 된다.
+    // non-uniform scale까지 안전하게 처리하려면 inverse-transpose normal matrix를 사용한다.
     vNormal     = mat3(transpose(inverse(uModel))) * aNormal;
     gl_Position = uProj * uView * worldPos;
 }
@@ -50,6 +52,7 @@ void main() {
     vec3 L = normalize(uLightPos - vFragPos);
     vec3 V = normalize(uViewPos  - vFragPos);
 
+    // Ambient는 직접광이 닿지 않는 면도 완전히 검게 보이지 않게 하는 단순 근사.
     vec3 ambient = 0.07 * uAlbedo;
 
     float diff   = max(dot(N, L), 0.0);
@@ -57,9 +60,11 @@ void main() {
 
     float spec;
     if (uMode == 1) {
+        // Phong: 반사 벡터 R과 view 방향 V의 각도로 highlight 계산.
         vec3 R = reflect(-L, N);
         spec = pow(max(dot(V, R), 0.0), uShininess);
     } else {
+        // Blinn-Phong: light/view의 half vector H를 사용. 보통 더 안정적이고 빠르다.
         vec3 H = normalize(L + V);
         spec = pow(max(dot(N, H), 0.0), uShininess);
     }
@@ -81,6 +86,7 @@ static GLuint compileShader(GLenum type, const char* src) {
         spdlog::error("OpenGL shader compile failed: {}", log);
         throw std::runtime_error(std::string("shader: ") + log);
     }
+    spdlog::info("OpenGL shader compiled: type=0x{:x}", static_cast<unsigned>(type));
     return s;
 }
 
@@ -124,6 +130,8 @@ private:
     }
 
     float projectToSphere(float r, float px, float py) const {
+        // Arcball maps 2D mouse coordinates onto a virtual sphere.
+        // Outside the sphere, a hyperbolic sheet keeps rotation smooth near edges.
         float d = std::sqrt(px * px + py * py);
         if (d < r * 0.70710678f) return std::sqrt(r * r - d * d);
         float t = r * 0.70710678f;
@@ -147,6 +155,8 @@ private:
         if (action != GLFW_PRESS) return;
         if (key == GLFW_KEY_1) { m_mode = 0; updateTitle(); }
         if (key == GLFW_KEY_2) { m_mode = 1; updateTitle(); }
+        if (key == GLFW_KEY_1 || key == GLFW_KEY_2)
+            spdlog::info("Lighting model changed: {}", m_mode == 0 ? "Blinn-Phong" : "Phong");
     }
 
     void OnMouseButton(int button, int action, int) override {
@@ -181,13 +191,17 @@ private:
         m_lookDist = (ratio > 0.0f) ? m_lookDist * zoom : m_lookDist / zoom;
         m_lookDist = glm::clamp(m_lookDist, 2.0f, 25.0f);
         m_camPos = -camForward() * m_lookDist;
+        spdlog::info("Camera zoom distance: {:.2f}", m_lookDist);
     }
 
     void OnInit() override {
+        // Lighting needs correct front/back visibility, so enable depth testing.
         glEnable(GL_DEPTH_TEST);
 
         const glm::mat4 I(1);
 
+        // Each object owns its mesh, model matrix, and material.
+        // The shader is shared; per-object values are passed through uniforms before draw().
         m_floor = {
             GLMesh::from(plane()),
             glm::scale(I, {10, 10, 1}),
@@ -242,15 +256,21 @@ private:
         m_locShininess = glGetUniformLocation(m_program, "uShininess");
         m_locMode = glGetUniformLocation(m_program, "uMode");
 
+        // Build the initial camera from a lookAt matrix, then store it as position+quaternion
+        // so mouse arcball rotation can update it incrementally.
         glm::vec3 eye = glm::normalize(glm::vec3(3.0f, -5.0f, 3.5f)) * m_lookDist;
         glm::mat4 camMat = glm::inverse(
             glm::lookAt(eye, glm::vec3(0, 0, 0.5f), glm::vec3(0, 0, 1))
         );
         m_camQuat = glm::normalize(glm::quat_cast(glm::mat3(camMat)));
         m_camPos = eye;
+        spdlog::info("OpenGL lighting example initialized: objects={}, program={}, mode=Blinn-Phong",
+                     std::size(m_objects) + 1, m_program);
     }
 
     void draw(const SceneObject& obj, const glm::mat4& view, const glm::mat4& proj) {
+        // Uniforms are program-global state. Update them immediately before drawing
+        // each object so the same mesh shader can render different transforms/materials.
         glUniformMatrix4fv(m_locModel, 1, GL_FALSE, glm::value_ptr(obj.model));
         glUniformMatrix4fv(m_locView, 1, GL_FALSE, glm::value_ptr(view));
         glUniformMatrix4fv(m_locProj, 1, GL_FALSE, glm::value_ptr(proj));

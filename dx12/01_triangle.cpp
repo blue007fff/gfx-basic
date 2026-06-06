@@ -37,6 +37,7 @@ static Microsoft::WRL::ComPtr<ID3DBlob> compileShader(const char* src, const cha
         spdlog::error("HLSL compile failed for {}: {}", target, message);
         throw std::runtime_error(std::string("HLSL compile: ") + message);
     }
+    spdlog::info("HLSL shader compiled: target={}, bytes={}", target, blob->GetBufferSize());
     return blob;
 }
 
@@ -62,14 +63,17 @@ private:
     HANDLE                                          m_fenceEvent = nullptr;
     UINT                                            m_rtvSize = 0;   // RTV descriptor 크기 (GPU별로 다름)
     UINT                                            m_frameIdx = 0;  // 현재 백버퍼 인덱스
+    UINT                                            m_loggedFrames = 0;
 
     void OnInit() override {
         CreateDXGIFactory2(0, IID_PPV_ARGS(&m_factory));
         D3D12CreateDevice(nullptr, D3D_FEATURE_LEVEL_11_0, IID_PPV_ARGS(&m_device));
+        spdlog::info("DX12 device created: feature level >= 11_0");
 
         D3D12_COMMAND_QUEUE_DESC qDesc = {};
         qDesc.Type = D3D12_COMMAND_LIST_TYPE_DIRECT;
         m_device->CreateCommandQueue(&qDesc, IID_PPV_ARGS(&m_cmdQueue));
+        spdlog::info("DX12 direct command queue created");
 
         // ─── Swap Chain ──────────────────────────────────────────────────────
         // FLIP_DISCARD: 모던 DXGI 권장. 이전 BLT 모델보다 효율적.
@@ -87,6 +91,8 @@ private:
         m_factory->CreateSwapChainForHwnd(m_cmdQueue.Get(), m_hwnd, &scDesc, nullptr, nullptr, &sc1);
         sc1.As(&m_swapChain);
         m_frameIdx = m_swapChain->GetCurrentBackBufferIndex();
+        spdlog::info("DX12 swapchain created: buffers={}, size={}x{}, format=R8G8B8A8_UNORM",
+                     FRAME_COUNT, m_width, m_height);
 
         // ─── RTV Descriptor Heap ─────────────────────────────────────────────
         // RTV는 RENDER_TARGET 전용 descriptor. CBV/SRV/UAV용 heap과 분리됨.
@@ -97,6 +103,8 @@ private:
         heapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
         m_device->CreateDescriptorHeap(&heapDesc, IID_PPV_ARGS(&m_rtvHeap));
         m_rtvSize = m_device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
+        spdlog::info("DX12 RTV heap created: descriptors={}, descriptorSize={}",
+                     FRAME_COUNT, m_rtvSize);
 
         // 각 백버퍼에 대해 RTV 생성
         D3D12_CPU_DESCRIPTOR_HANDLE rtvHandle = m_rtvHeap->GetCPUDescriptorHandleForHeapStart();
@@ -162,6 +170,7 @@ private:
         psoDesc.RTVFormats[0]         = DXGI_FORMAT_R8G8B8A8_UNORM;  // 스왑체인 포맷과 동일
         psoDesc.SampleDesc            = {1, 0};
         m_device->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&m_pso));
+        spdlog::info("DX12 graphics PSO created");
 
         // Command List: 생성 직후 recording 상태 → 바로 Close해서 onRender에서 Reset부터 시작.
         m_device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT,
@@ -203,11 +212,13 @@ private:
 
         // VBV: GPU virtual address + 전체 크기 + stride.
         m_vbView = {m_vertexBuffer->GetGPUVirtualAddress(), vbSize, sizeof(Vertex)};
+        spdlog::info("DX12 vertex buffer uploaded: vertices=3, bytes={}", vbSize);
 
         // ─── Fence (CPU ↔ GPU 동기화) ────────────────────────────────────────
         // GPU는 비동기. 백버퍼를 다시 쓰기 전에 GPU가 끝났는지 fence로 확인해야 한다.
         m_device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&m_fence));
         m_fenceEvent = CreateEvent(nullptr, FALSE, FALSE, nullptr);
+        spdlog::info("DX12 triangle initialized: frameIndex={}", m_frameIdx);
     }
 
     void OnRender() override {
@@ -258,6 +269,10 @@ private:
         ID3D12CommandList* lists[] = {m_cmdList.Get()};
         m_cmdQueue->ExecuteCommandLists(1, lists);
         m_swapChain->Present(1, 0);  // SyncInterval=1 → vsync
+        if (m_loggedFrames < 8) {
+            spdlog::info("DX12 frame {} presented backbuffer {}", m_loggedFrames, m_frameIdx);
+            ++m_loggedFrames;
+        }
 
         // ─── 6) GPU 대기 (단순 single-frame sync) ────────────────────────────
         // 실전에선 백버퍼마다 fence value를 관리해 frame N-2 정도만 기다리는 게 효율적.

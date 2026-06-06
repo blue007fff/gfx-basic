@@ -10,8 +10,10 @@
 #include <stdexcept>
 
 void DXBaseApp::Run() {
+    spdlog::info("Starting DX12 example: {} ({}x{})", m_title, m_width, m_height);
     InitWindow();
     OnInit();
+    spdlog::info("Entering render loop: {}", m_title);
     while (!glfwWindowShouldClose(m_window) && m_running) {
         glfwPollEvents();
         OnRender();
@@ -35,6 +37,7 @@ void DXBaseApp::InitWindow() {
     }
 
     m_hwnd = glfwGetWin32Window(m_window);
+    spdlog::info("GLFW window created for DX12: {} hwnd={}", m_title, static_cast<void*>(m_hwnd));
 
     glfwSetWindowUserPointer(m_window, this);
     glfwSetFramebufferSizeCallback(m_window, OnFramebufferResize);
@@ -42,6 +45,7 @@ void DXBaseApp::InitWindow() {
 }
 
 void DXBaseApp::Shutdown() {
+    spdlog::info("Shutting down DX12 example: {}", m_title);
     glfwDestroyWindow(m_window);
     glfwTerminate();
 }
@@ -50,6 +54,7 @@ void DXBaseApp::OnFramebufferResize(GLFWwindow* w, int width, int height) {
     auto* app = static_cast<DXBaseApp*>(glfwGetWindowUserPointer(w));
     app->m_width  = width;
     app->m_height = height;
+    spdlog::info("DX12 framebuffer resized: {}x{}", width, height);
     app->OnResize(width, height);
 }
 

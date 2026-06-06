@@ -5,12 +5,14 @@
 #include <stdexcept>
 
 void VKBaseApp::Run() {
+    spdlog::info("Starting Vulkan example: {} ({}x{})", m_title, m_width, m_height);
     // volkInitialize: vkGetInstanceProcAddr를 동적 로드. 모든 Vulkan 호출 전에 필수.
     // 실패하면 시스템에 Vulkan 런타임(loader DLL/so)이 없다는 뜻.
     if (volkInitialize() != VK_SUCCESS) {
         spdlog::error("volkInitialize failed: Vulkan runtime not found");
         throw std::runtime_error("volkInitialize failed - Vulkan runtime not found");
     }
+    spdlog::info("volk initialized");
 
     if (!glfwInit()) {
         spdlog::error("glfwInit failed");
@@ -25,16 +27,19 @@ void VKBaseApp::Run() {
         throw std::runtime_error("glfwCreateWindow failed");
     }
     glfwSetWindowUserPointer(m_window, this);
+    spdlog::info("GLFW window created for Vulkan: {}", m_title);
 
     // Vulkan instance and instance-level function loading happen in OnInit().
     OnInit();
 
+    spdlog::info("Entering render loop: {}", m_title);
     while (!glfwWindowShouldClose(m_window) && m_running) {
         glfwPollEvents();
         OnRender();
     }
     OnCleanup();
 
+    spdlog::info("Shutting down Vulkan example: {}", m_title);
     glfwDestroyWindow(m_window);
     glfwTerminate();
 }

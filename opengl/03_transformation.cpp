@@ -28,6 +28,8 @@ out vec3 vColor;
 out vec2 vUV;
 
 void main() {
+    // MVP order is projection * view * model.
+    // The rightmost matrix runs first: local vertex -> world -> camera -> clip.
     gl_Position = uProj * uView * uModel * vec4(aPos, 1.0);
     vColor = abs(normalize(aNormal));
     vUV = aUV;
@@ -63,6 +65,7 @@ static GLuint compileShader(GLenum type, const char* src) {
         spdlog::error("OpenGL shader compile failed: {}", log);
         throw std::runtime_error(std::string("shader: ") + log);
     }
+    spdlog::info("OpenGL shader compiled: type=0x{:x}", static_cast<unsigned>(type));
     return s;
 }
 
@@ -84,10 +87,13 @@ static GLuint loadTexture(const char* path) {
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     stbi_image_free(data);
+    spdlog::info("Texture loaded: {} ({}x{}, channels forced to RGBA)", path, w, h);
     return tex;
 }
 
 struct TransformInfo {
+    // Per-cube animation parameters. Keeping them in one struct makes it easy to
+    // see which values affect orbit, spin, tilt, and scale independently.
     float scale = 1.0f;
     float orbitSpeed = 0.0f;
     float tiltAngle = 0.0f;
@@ -114,6 +120,8 @@ public:
 
 private:
     void OnInit() override {
+        // Depth testing is required once geometry can overlap in 3D.
+        // Without it, later draw calls would overwrite earlier ones regardless of distance.
         glEnable(GL_DEPTH_TEST);
 
         m_cube = GLMesh::from(cube());
@@ -143,10 +151,13 @@ private:
         m_tex0 = loadTexture(assetPath("textures/awesomeface.png").c_str());
         m_tex1 = loadTexture(assetPath("textures/container.jpg").c_str());
 
+        // Texture unit assignment is stable for the whole program lifetime.
         glUseProgram(m_program);
         glUniform1i(glGetUniformLocation(m_program, "uTex0"), 0);
         glUniform1i(glGetUniformLocation(m_program, "uTex1"), 1);
 
+        // Fixed seed keeps the scene deterministic, which is useful when comparing
+        // transformation changes while learning.
         std::mt19937 rng(20260606);
         std::uniform_real_distribution<float> unit(0.0f, 1.0f);
         for (auto& info : m_transforms) {
@@ -156,6 +167,8 @@ private:
             info.orbitRadius = 2.0f + unit(rng) * 3.0f;
             info.spinSpeed = 90.0f + unit(rng) * 90.0f;
         }
+        spdlog::info("OpenGL transformation example initialized: cubes={}, program={}",
+                     m_transforms.size() + 1, m_program);
     }
 
     void drawCube(const glm::mat4& model) const {
@@ -168,7 +181,11 @@ private:
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
         float aspect = m_height > 0 ? float(m_width) / float(m_height) : 1.0f;
+        // Perspective projection maps camera-space 3D into clip-space.
+        // Near/far values should tightly bound the scene to preserve depth precision.
         glm::mat4 proj = glm::perspective(glm::radians(60.0f), aspect, 0.1f, 100.0f);
+        // lookAt builds a view matrix from camera position, target, and up axis.
+        // This project uses Z-up for the OpenGL 3D examples.
         glm::mat4 view = glm::lookAt(
             glm::vec3(0.0f, 5.0f, 2.0f),
             glm::vec3(0.0f, 0.0f, 0.0f),
@@ -193,6 +210,8 @@ private:
 
             glm::quat orbit = glm::angleAxis(glm::radians(info.orbitAngle), glm::vec3(0, 0, 1));
             glm::quat tilt = glm::angleAxis(glm::radians(info.tiltAngle), glm::vec3(0, 1, 0));
+            // Matrix multiplication order matters. The rightmost operation happens first:
+            // scale local cube -> tilt/orbit orientation -> move to radius -> spin around world Z.
             glm::mat4 model =
                 glm::rotate(glm::mat4(1), glm::radians(info.spinAngle), glm::vec3(0, 0, 1)) *
                 glm::translate(glm::mat4(1), glm::vec3(info.orbitRadius, 0, 0)) *
